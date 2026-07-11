@@ -195,10 +195,12 @@
   }
 
   function hidePlayPanels() {
-    ["panel-actions", "panel-event", "panel-week-end", "panel-press"].forEach((id) => {
-      const el = $(id);
-      if (el) el.classList.add("hidden");
-    });
+    ["panel-actions", "panel-event", "panel-week-end", "panel-press", "panel-episode"].forEach(
+      (id) => {
+        const el = $(id);
+        if (el) el.classList.add("hidden");
+      }
+    );
   }
 
   // —— Start / select ——
@@ -325,79 +327,261 @@
     state.actionsThisWeek = 0;
     state.weekNotes = [];
     state.comboSneaky = 0;
+    state.episodeDone = false;
     pressSession = null;
 
     const phase = phaseForWeek(state.week);
     state.weekType = pickWeekType();
-    state.maxActions = state.weekType.maxActions;
+    // Episode-first: max 1 ekstra træk efter historien
+    state.maxActions = 1;
 
-    $("phase-label").textContent = `${state.weekType.emoji} ${phase.name}`;
+    $("phase-label").textContent = `${phase.name}`;
     $("week-label").textContent = `Uge ${state.week} / ${TOTAL_WEEKS}`;
     $("char-name-chip").textContent = `${state.char.emoji} ${state.char.name}`;
-    $("week-type-pill").textContent = `${state.weekType.emoji} ${state.weekType.name}`;
-    $("week-type-pill").className = "pill week-type " + state.weekType.id;
 
-    let hl = pick(phase.headlines).replace(/\{navn\}/g, state.char.name);
-    if (state.week === 8) hl = valgaftenHeadline();
     if (state.week === 24) {
       finishCampaign(true);
       return;
     }
-    if (state.weekType.id === "crisis") {
-      hl = pick([
-        `KRISE: Presset lukker ind om ${state.char.name}`,
-        `Breaking: Kaos i kulissen hos ${state.char.name}`,
-        `Alle vil have svar — nu`,
-      ]);
-    }
-    if (state.meters.mistanke >= 60 && Math.random() < 0.3) {
-      hl = `Kilder: Er ${state.char.name} ved at miste grebet?`;
+
+    // Valgaften som særlig episode-uge
+    if (state.week === 8) {
+      const hl = valgaftenHeadline();
+      $("headline-text").textContent = hl;
+      flashHeadline(false);
+      renderAllStatus();
+      endWeekSummary();
+      return;
     }
 
-    $("headline-text").textContent = hl;
-    const box = $("headline-box");
-    box.classList.remove("flash");
-    void box.offsetWidth;
-    box.classList.add("flash");
-    box.classList.toggle("crisis", state.weekType.id === "crisis");
-
+    passiveDrift();
     renderAllStatus();
 
     if (state.week === 4) toast("🏁 Valgkamp!", "warn");
     if (state.week === 9) toast("🏛️ Regeringspoker", "warn");
-    if (state.week === 18) toast("⚠️ Midtvejs-pres", "bad");
-    if (state.weekType.id === "temptation") toast("😈 Fristelsen banker på…", "warn");
-    if (state.weekType.id === "crisis") toast("🚨 Kriseuge!", "bad");
+    if (state.week === 6) toast("🎙️ Boss-uge: Pressemøde!", "warn");
+    if (state.week === 12) toast("⚖️ Boss-uge: Kommissionen!", "bad");
+    if (state.week === 18) toast("🗳️ Boss-uge: Midtvejs!", "warn");
 
-    // Passive drift: extreme rels slowly pull mistanke/image
-    passiveDrift();
-
+    // Gæld / gamle beviser kan afbryde — men ellers altid episode først
     const due = state.debts.filter((d) => d.due <= state.week);
-    if (due.length) {
+    if (due.length && Math.random() < 0.55) {
       showDebtEvent(due[0]);
       return;
     }
 
-    if (
-      state.evidence.length &&
-      state.week >= 10 &&
-      Math.random() < 0.12 + state.evidence.length * 0.03
-    ) {
-      toast("📂 Noget fra bunken…", "bad");
-      showEvidenceEvent();
+    startEpisodeWeek();
+  }
+
+  function flashHeadline(crisis) {
+    const box = $("headline-box");
+    box.classList.remove("flash");
+    void box.offsetWidth;
+    box.classList.add("flash");
+    box.classList.toggle("crisis", !!crisis);
+  }
+
+  function startEpisodeWeek() {
+    const ep = pickEpisodeForWeek(state);
+    state.currentEpisode = ep;
+
+    // Track recent
+    state.flags.recentEpisodes = state.flags.recentEpisodes || [];
+    state.flags.recentEpisodes.push(ep.id);
+    if (state.flags.recentEpisodes.length > 5) state.flags.recentEpisodes.shift();
+
+    const hl = (ep.headline || ep.title).replace(/\{navn\}/g, state.char.name);
+    $("headline-text").textContent = hl;
+    flashHeadline(!!ep.boss);
+
+    if (ep.isPressBoss) {
+      // Boss pressemøde = mini-spil direkte
+      toast("🎙️ LIVE pressemøde!", "warn");
+      const fakeAction = { id: "press_konf", name: ep.title };
+      startPressGame(fakeAction);
       return;
     }
 
-    // Kriseuge: start med event efter kort “valg” — eller event først
-    if (state.weekType.forceEvent && Math.random() < 0.55) {
-      const ev = pickEvent();
-      if (ev) {
-        showEvent(ev);
-        return;
-      }
+    showEpisode(ep);
+  }
+
+  function showEpisode(ep) {
+    hidePlayPanels();
+    const panel = $("panel-episode");
+    panel.classList.remove("hidden");
+    panel.classList.toggle("boss", !!ep.boss);
+    focusPlayPanel("panel-episode");
+
+    $("episode-badge").textContent = ep.boss
+      ? `⚔️ BOSS · UGE ${state.week}`
+      : `${ep.emoji || "📖"} EPISODE`;
+    $("week-type-pill").textContent = ep.boss ? "Boss-uge" : "Historie";
+    $("week-type-pill").className = "pill week-type " + (ep.boss ? "crisis" : "normal");
+    $("episode-npc").textContent = ep.npc ? `👤 ${ep.npc}` : "";
+    $("episode-title").textContent = ep.title;
+    $("episode-text").textContent = ep.text;
+    $("episode-reply").classList.add("hidden");
+    $("episode-reply").textContent = "";
+
+    const box = $("episode-choices");
+    box.innerHTML = "";
+    (ep.choices || []).forEach((ch, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "action-btn" + (ch.temptation ? " temptation" : "");
+      btn.innerHTML = `
+        <span class="ico">${["🅰️", "🅱️", "©️"][idx] || "•"}</span>
+        <span class="title">${ch.temptation ? "⚠️ " : ""}${ch.label}</span>`;
+      btn.addEventListener("click", () => resolveEpisodeChoice(ep, ch, btn));
+      box.appendChild(btn);
+    });
+  }
+
+  function resolveEpisodeChoice(ep, ch) {
+    // Disable further clicks
+    $("episode-choices")
+      .querySelectorAll("button")
+      .forEach((b) => {
+        b.disabled = true;
+      });
+
+    const before = snapshot();
+    let note = ch.note || "";
+    let replyObj = ch.reply;
+
+    // requireKasse fail path
+    if (ch.requireKasse && state.meters.kasse < ch.requireKasse) {
+      add(state, ch.failEffect || { mistanke: 8 });
+      addRel(state, ch.failRel || {});
+      if (ch.failReveal) revealEvidence(state);
+      note = ch.failNote || note;
+    } else if (ch.coinflip) {
+      const win = Math.random() < (ch.coinflip.chance ?? 0.5);
+      const branch = win ? ch.coinflip.win : ch.coinflip.lose;
+      add(state, branch.effect || {});
+      addRel(state, branch.rel || {});
+      note = branch.note || note;
+      replyObj = branch.reply || replyObj;
+    } else {
+      add(state, ch.effect || {});
+      addRel(state, ch.rel || {});
     }
 
-    showActions();
+    if (ch.evidence) {
+      if (ch.evidenceChance == null || Math.random() < ch.evidenceChance) {
+        addEvidence(state, ch.evidence);
+      }
+    }
+    if (ch.clearOneEvidence && state.evidence.length) {
+      state.evidence.pop();
+    }
+    if (ch.debt) {
+      state.debts.push({
+        label: ch.debt.label,
+        due: state.week + (ch.debt.dueAdd || 3),
+      });
+    }
+    if (ch.setFlag === "tookTemptation") {
+      state.flags.tookTemptation = true;
+      state.flags.temptationCount = (state.flags.temptationCount || 0) + 1;
+    }
+    if (ch.setFlag === "refusedTemptation") {
+      state.flags.refusedTemptation = (state.flags.refusedTemptation || 0) + 1;
+    }
+    if (ch.setFlag === "staffLoyal") state.flags.staffLoyal = true;
+    if (ch.flagStorm) state.flags.stormNext = true;
+    if (ch.temptation) toast("⚠️ Fristelse", "warn");
+
+    const reply = resolveReply(replyObj, state.char.id);
+    if (reply) {
+      $("episode-reply").textContent = reply;
+      $("episode-reply").classList.remove("hidden");
+      state.weekNotes.push(reply);
+    }
+    if (note) state.weekNotes.push(note);
+
+    state.history.push({
+      week: state.week,
+      kind: "episode",
+      name: ep.title,
+      msg: note || reply || ch.label,
+    });
+    state.episodeDone = true;
+
+    afterChange(before);
+
+    if (checkAnyLose()) return;
+
+    // Kort pause så man kan læse replik — så videre
+    setTimeout(() => {
+      if (checkAnyLose()) return;
+      // Boss: ingen ekstra træk (undtagen midtvej tillader det)
+      if (ep.boss && ep.id !== "boss_midtvalg") {
+        endWeekSummary();
+        return;
+      }
+      showLimitedActions();
+    }, 700);
+  }
+
+  /** Efter episode: max 1 træk, kun 5–6 knapper */
+  function showLimitedActions() {
+    state.actionsThisWeek = 0;
+    state.maxActions = 1;
+    hidePlayPanels();
+    $("panel-actions").classList.remove("hidden");
+    focusPlayPanel("panel-actions");
+    $("actions-left").textContent = "1 ekstra træk";
+    $("week-hint").textContent =
+      "Historien er spillet. Ét valgfrit træk — eller gå til facit.";
+
+    let pool = [
+      "lav_profil",
+      "tale",
+      "ryd_op",
+      "smør_parti",
+      "bilag",
+      "laek",
+      "middag",
+      "angrib",
+      "husker_ikke",
+    ];
+    if (state.char.uniqueAction) pool.unshift(state.char.uniqueAction);
+    // Fristelse lejlighedsvis
+    if (Math.random() < 0.35) {
+      pool.unshift(pick(TEMPTATION_IDS));
+    }
+    // Shuffle and take 5–6
+    pool = [...new Set(pool)];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const ids = pool.slice(0, 6);
+
+    const list = $("actions-list");
+    list.innerHTML = "";
+    ids.forEach((id) => {
+      const a = ACTIONS[id];
+      if (!a) return;
+      if (a.unique && state.char.uniqueAction !== id) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const locked = a.require && !a.require(state);
+      btn.disabled = locked;
+      btn.className =
+        "action-btn" +
+        (a.unique ? " unique" : "") +
+        (a.temptation ? " temptation" : "") +
+        (a.fuzzy ? " fuzzy" : "");
+      const ico = ACTION_ICONS[id] || "•";
+      btn.innerHTML = `
+        <span class="ico">${ico}</span>
+        <span class="title">${a.temptation ? "⚠️ " : ""}${a.name}${a.unique ? " ★" : ""}</span>
+        <div class="tags">${a.fuzzy ? "???" : a.tags || ""}</div>`;
+      btn.addEventListener("click", () => doAction(a));
+      list.appendChild(btn);
+    });
   }
 
   function passiveDrift() {
@@ -547,42 +731,41 @@
       state.flags.cleanWeeks = (state.flags.cleanWeeks || 0) + (action.id === "lav_profil" ? 1 : 0);
     }
 
+    // Karakter-replik lejlighedsvis
+    if (Math.random() < 0.4 && typeof CHAR_QUIPS !== "undefined") {
+      const quips = CHAR_QUIPS[state.char.id];
+      if (quips) {
+        const q = pick(quips);
+        state.weekNotes.push(q);
+        toast(q.slice(0, 48) + (q.length > 48 ? "…" : ""), "warn");
+      }
+    }
+
     afterChange(before);
     if (checkAnyLose()) return;
 
-    if (state.actionsThisWeek >= state.maxActions) {
-      afterActions();
-    } else {
-      showActions();
-    }
+    // Efter ekstra-træk: facit (episode er allerede spillet)
+    afterActions();
   }
 
   $("btn-skip-week").addEventListener("click", () => {
-    if (state.actionsThisWeek === 0) {
-      const before = snapshot();
-      state.weekNotes.push("😴 Du gjorde ingenting. Kedeligt — men sikkert.");
-      add(state, { magt: -2, image: -2, mistanke: -2 });
-      addRel(state, { parti: -2, lobby: -2, presse: 2 });
-      afterChange(before);
+    if (state.actionsThisWeek === 0 && state.episodeDone) {
+      state.weekNotes.push("Du skipper ekstra-trækket. Videre i historien.");
     }
     afterActions();
   });
 
   function afterActions() {
-    let chance = state.weekType.eventChance;
-    if (state.char.traits.pressMore) chance += 0.1;
-    if (state.meters.mistanke >= 50) chance += 0.08;
-    if (state.weekType.forceEvent) chance = 1;
-
-    if (Math.random() < chance) {
+    // Sjælden ekstra-krise (historien er allerede episode)
+    if (Math.random() < 0.12 && state.meters.mistanke >= 55) {
       const ev = pickEvent();
       if (ev) {
-        toast("⚡ Krise!", "bad");
+        toast("⚡ Ekstra krise!", "bad");
         showEvent(ev);
         return;
       }
     }
-    if (Math.random() < 0.22) {
+    if (Math.random() < 0.18) {
       state.weekNotes.push(
         pick([
           "En journalist ringede — du “var i møde”.",
@@ -632,9 +815,8 @@
         state.history.push({ week: state.week, kind: "event", name: ev.title, msg });
         afterChange(before);
         if (checkAnyLose()) return;
-        // Hvis kriseuge og vi ikke har handlet endnu, giv chance for 1 handling
-        if (state.weekType.forceEvent && state.actionsThisWeek < state.maxActions) {
-          showActions();
+        if (!state.episodeDone) {
+          startEpisodeWeek();
         } else {
           endWeekSummary();
         }
@@ -695,7 +877,8 @@
         state.weekNotes.push(ch.run());
         afterChange(before);
         if (checkAnyLose()) return;
-        showActions();
+        if (!state.episodeDone) startEpisodeWeek();
+        else endWeekSummary();
       });
       box.appendChild(btn);
     });
@@ -751,7 +934,8 @@
         state.weekNotes.push(ch.run());
         afterChange(before);
         if (checkAnyLose()) return;
-        showActions();
+        if (!state.episodeDone) startEpisodeWeek();
+        else endWeekSummary();
       });
       box.appendChild(btn);
     });
@@ -838,11 +1022,16 @@
       msg,
     });
     state.flags.pressGames = (state.flags.pressGames || 0) + 1;
+    state.episodeDone = true;
     pressSession = null;
     renderAllStatus();
     if (checkAnyLose()) return;
-    if (state.actionsThisWeek >= state.maxActions) afterActions();
-    else showActions();
+    // Efter boss-press: facit (ingen ekstra menu)
+    if (state.currentEpisode && state.currentEpisode.boss) {
+      endWeekSummary();
+    } else {
+      showLimitedActions();
+    }
   }
 
   // —— Week end / lose ——
