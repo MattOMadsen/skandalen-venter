@@ -18,6 +18,7 @@
 
   <div id="toast-root" class="toast-root" aria-live="polite"></div>
   <div id="float-root" class="float-root" aria-hidden="true"></div>
+  <div id="screen-flash" class="screen-flash" aria-hidden="true"></div>
 
   <div id="app">
     <!-- START -->
@@ -101,6 +102,8 @@
           <p id="episode-text" class="event-body"></p>
           <div id="episode-choices" class="action-list"></div>
           <div id="episode-reply" class="char-reply hidden"></div>
+          <div id="episode-impact" class="impact-strip hidden"></div>
+          <button type="button" class="btn primary big hidden" id="btn-episode-continue">Fortsæt →</button>
         </div>
 
         <div id="panel-actions" class="panel play-panel hidden">
@@ -111,6 +114,7 @@
             </div>
           </div>
           <p class="week-hint" id="week-hint">Blandede træk — skifter hver uge. Op til 2.</p>
+          <div id="last-action-feedback" class="impact-strip soft hidden"></div>
           <div id="actions-list" class="action-list"></div>
           <button type="button" class="btn ghost" id="btn-skip-week">Spring resten over →</button>
         </div>
@@ -130,7 +134,12 @@
         </div>
 
         <div id="panel-week-end" class="panel week-end-panel play-panel hidden">
-          <h3>📋 Ugens facit</h3>
+          <div class="week-end-header">
+            <h3>📋 Ugens facit</h3>
+            <p class="week-end-verdict" id="week-end-verdict"></p>
+          </div>
+          <div id="week-npc-board" class="npc-board"></div>
+          <div id="week-delta" class="week-delta"></div>
           <div id="week-summary" class="week-summary"></div>
           <button type="button" class="btn primary big" id="btn-next-week">Næste uge →</button>
         </div>

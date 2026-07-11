@@ -27,13 +27,54 @@
   }
 
   // —— UI feedback ——
+  // —— Feedback: toast, float, flash, sfx, impact ——
+  let audioCtx = null;
+  function sfx(kind) {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      const now = audioCtx.currentTime;
+      if (kind === "good") {
+        o.frequency.setValueAtTime(520, now);
+        o.frequency.exponentialRampToValueAtTime(780, now + 0.12);
+        g.gain.setValueAtTime(0.05, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      } else if (kind === "bad") {
+        o.type = "square";
+        o.frequency.setValueAtTime(180, now);
+        o.frequency.exponentialRampToValueAtTime(90, now + 0.18);
+        g.gain.setValueAtTime(0.04, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      } else {
+        o.frequency.setValueAtTime(320, now);
+        g.gain.setValueAtTime(0.03, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      }
+      o.start(now);
+      o.stop(now + 0.25);
+    } catch (_) {}
+  }
+
   function toast(msg, kind = "warn") {
     const root = $("toast-root");
     const el = document.createElement("div");
     el.className = "toast " + kind;
     el.textContent = msg;
     root.appendChild(el);
-    setTimeout(() => el.remove(), 2800);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  function flashScreen(kind) {
+    const el = $("screen-flash");
+    if (!el) return;
+    el.className = "screen-flash " + kind;
+    void el.offsetWidth;
+    setTimeout(() => {
+      el.className = "screen-flash";
+    }, 560);
   }
 
   function floatDeltas(beforeM, afterM, beforeR, afterR) {
@@ -52,35 +93,99 @@
     if (beforeR && afterR) {
       REL_KEYS.forEach((k) => {
         const d = afterR[k] - beforeR[k];
-        if (!d || Math.abs(d) < 3) return;
-        spawnFloat(
-          `${REL_META[k].emoji} ${d > 0 ? "+" : ""}${d}`,
-          d < 0,
-          i++
-        );
+        if (!d || Math.abs(d) < 2) return;
+        spawnFloat(`${REL_META[k].emoji} ${d > 0 ? "+" : ""}${d}`, d < 0, i++);
       });
     }
     function spawnFloat(text, bad, idx) {
       const el = document.createElement("div");
       el.className = "float-delta " + (bad ? "neg" : "pos");
       el.textContent = text;
-      el.style.left = 18 + Math.random() * 55 + "%";
-      el.style.top = 32 + idx * 7 + "%";
+      el.style.left = 12 + Math.random() * 60 + "%";
+      el.style.top = 28 + idx * 7 + "%";
       root.appendChild(el);
-      setTimeout(() => el.remove(), 1100);
+      setTimeout(() => el.remove(), 1400);
     }
   }
 
   function snapshot() {
-    return {
-      meters: { ...state.meters },
-      rel: { ...state.rel },
-    };
+    return { meters: { ...state.meters }, rel: { ...state.rel } };
+  }
+
+  function scoreDelta(before) {
+    let score = 0;
+    const m = state.meters;
+    const bm = before.meters;
+    score += m.magt - bm.magt + (m.kasse - bm.kasse) + (m.image - bm.image) - (m.mistanke - bm.mistanke);
+    REL_KEYS.forEach((k) => {
+      score += Math.round((state.rel[k] - before.rel[k]) * 0.35);
+    });
+    return score;
+  }
+
+  function buildImpactChips(before) {
+    const chips = [];
+    const labels = { magt: "⚡ Magt", kasse: "💰 Kasse", image: "✨ Image", mistanke: "🕵️ Mistanke" };
+    ["magt", "kasse", "image", "mistanke"].forEach((k) => {
+      const d = state.meters[k] - before.meters[k];
+      if (!d) return;
+      const bad = k === "mistanke" ? d > 0 : d < 0;
+      chips.push({ text: `${labels[k]} ${d > 0 ? "+" : ""}${d}`, up: !bad });
+    });
+    REL_KEYS.forEach((k) => {
+      const d = state.rel[k] - before.rel[k];
+      if (!d || Math.abs(d) < 2) return;
+      chips.push({
+        text: `${REL_META[k].emoji} ${REL_META[k].label} ${d > 0 ? "+" : ""}${d}`,
+        up: d > 0,
+      });
+    });
+    return chips;
+  }
+
+  function fillImpactStrip(el, before, title) {
+    if (!el) return;
+    const chips = buildImpactChips(before);
+    if (!chips.length) {
+      el.innerHTML = `<div class="impact-title">${title}</div><div class="muted">Lille rystelse — status næsten uændret.</div>`;
+    } else {
+      el.innerHTML =
+        `<div class="impact-title">${title}</div><div class="impact-chips">` +
+        chips.map((c) => `<span class="impact-chip ${c.up ? "up" : "down"}">${c.text}</span>`).join("") +
+        `</div>`;
+    }
+    el.classList.remove("hidden");
   }
 
   function afterChange(before) {
     floatDeltas(before.meters, state.meters, before.rel, state.rel);
+    const sc = scoreDelta(before);
+    if (sc >= 6) {
+      flashScreen("good");
+      sfx("good");
+    } else if (sc <= -6) {
+      flashScreen("bad");
+      sfx("bad");
+    } else {
+      sfx("click");
+    }
+    const port = $("char-portrait");
+    if (port) {
+      port.classList.remove("react");
+      void port.offsetWidth;
+      port.classList.add("react");
+    }
     renderAllStatus();
+    ["magt", "kasse", "image", "mistanke"].forEach((k) => {
+      if (state.meters[k] !== before.meters[k]) {
+        const row = document.querySelector(`.meter.${k}`);
+        if (row) {
+          row.classList.remove("pop");
+          void row.offsetWidth;
+          row.classList.add("pop");
+        }
+      }
+    });
     warnCritical(before);
   }
 
@@ -329,6 +434,7 @@
     state.weekNotes = [];
     state.comboSneaky = 0;
     state.episodeDone = false;
+    state.weekStartSnap = snapshot();
     pressSession = null;
 
     const phase = phaseForWeek(state.week);
@@ -423,9 +529,20 @@
     $("episode-text").textContent = ep.text;
     $("episode-reply").classList.add("hidden");
     $("episode-reply").textContent = "";
+    const impact = $("episode-impact");
+    if (impact) {
+      impact.classList.add("hidden");
+      impact.innerHTML = "";
+    }
+    const cont = $("btn-episode-continue");
+    if (cont) {
+      cont.classList.add("hidden");
+      cont.onclick = null;
+    }
 
     const box = $("episode-choices");
     box.innerHTML = "";
+    box.classList.remove("hidden");
     (ep.choices || []).forEach((ch, idx) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -510,18 +627,28 @@
     state.episodeDone = true;
 
     afterChange(before);
+    fillImpactStrip($("episode-impact"), before, "Effekt af dit valg");
+
+    // Skjul valg, vis fortsæt — så spilleren mærker svaret
+    $("episode-choices").classList.add("hidden");
+    const cont = $("btn-episode-continue");
+    cont.classList.remove("hidden");
+    cont.textContent =
+      ep.boss && ep.id !== "boss_midtvalg"
+        ? "Se ugens facit →"
+        : "Fortsæt til ugens træk →";
 
     if (checkAnyLose()) return;
 
-    // Efter historie: blandede træk (forskellige hver uge pga. cooldown + shuffle)
-    setTimeout(() => {
+    cont.onclick = () => {
+      cont.classList.add("hidden");
       if (checkAnyLose()) return;
       if (ep.boss && ep.id !== "boss_midtvalg") {
         endWeekSummary();
         return;
       }
       showRotatingActions();
-    }, 550);
+    };
   }
 
   /** Handlinger roterer: max 4 knapper, 2 træk — nyligt brugte er på cooldown */
@@ -561,7 +688,12 @@
     focusPlayPanel("panel-actions");
     $("actions-left").textContent = "2 træk";
     $("week-hint").textContent =
-      "Ugens træk skifter — nyligt brugte er på pause. Vælg op til 2.";
+      "Ugens træk skifter — nyligt brugte er på pause. Vælg op til 2. Se effekten efter hvert træk.";
+    const fb = $("last-action-feedback");
+    if (fb) {
+      fb.classList.add("hidden");
+      fb.innerHTML = "";
+    }
 
     // Bland kategorier: 1 safe, 1 image, 1 power, 0–1 spice
     let ids = [
@@ -795,10 +927,13 @@
     }
 
     afterChange(before);
+    fillImpactStrip($("last-action-feedback"), before, `Resultat: ${action.name}`);
+    toast(msg.length > 70 ? msg.slice(0, 67) + "…" : msg, scoreDelta(before) >= 0 ? "good" : "bad");
+
     if (checkAnyLose()) return;
 
     if (state.actionsThisWeek >= state.maxActions) {
-      afterActions();
+      setTimeout(() => afterActions(), 400);
     } else {
       renderActionButtons();
     }
@@ -1090,6 +1225,51 @@
   }
 
   // —— Week end / lose ——
+  function npcLine(key) {
+    const v = state.rel[key];
+    const lines = {
+      parti: {
+        high: "“Vi bakker dig — indtil videre.”",
+        mid: "“Leverandør af ro, tak.”",
+        low: "“Formanden kigger på sin telefon.”",
+      },
+      presse: {
+        high: "“Holm smiler. Det er mistænkeligt.”",
+        mid: "“Deadline venter på din næste fejl.”",
+        low: "“De graver. Med ske.”",
+      },
+      vaelgere: {
+        high: "“Lis fra Holstebro sender et hjerte. Næsten.”",
+        mid: "“Målingerne er… målinger.”",
+        low: "“Kommentarfeltet er krig.”",
+      },
+      lobby: {
+        high: "“Kuverten er stadig varm.”",
+        mid: "“Vi tager en frokost snart.”",
+        low: "“Døren er lukket. Med dig udenfor.”",
+      },
+    };
+    const pack = lines[key];
+    if (v >= 65) return { mood: "happy", text: pack.high };
+    if (v <= 35) return { mood: "angry", text: pack.low };
+    return { mood: "neutral", text: pack.mid };
+  }
+
+  function weekVerdict() {
+    const m = state.meters;
+    if (m.mistanke >= 75) return "🔥 Ugen endte varm — for varm.";
+    if (m.image >= 70 && m.mistanke < 40) return "✨ Du vandt ugen på image.";
+    if (state.rel.parti <= 30) return "🏛️ Partiet knurrer i kulissen.";
+    if (state.rel.lobby >= 75) return "💼 Lobbyen elsker dig. Det er en advarsel.";
+    if (state.weekNotes.some((n) => /kuvert|fristelse|⚠️/i.test(n)))
+      return "😈 Fristelsen vandt en runde.";
+    return pick([
+      "📰 En uge i magtens maskinrum — overlevet.",
+      "🎭 Spin, smil og sved. Klassisk.",
+      "⚖️ Balancen holder. Næppe evigt.",
+    ]);
+  }
+
   function endWeekSummary() {
     if (checkAnyLose()) return;
 
@@ -1098,13 +1278,39 @@
     $("panel-week-end").classList.remove("hidden");
     focusPlayPanel("panel-week-end");
 
+    $("week-end-verdict").textContent = weekVerdict();
+
+    // NPC board
+    $("week-npc-board").innerHTML = REL_KEYS.map((k) => {
+      const meta = REL_META[k];
+      const line = npcLine(k);
+      return `<div class="npc-card ${line.mood}">
+        <div class="npc-name">${meta.emoji} ${meta.label} ${relFace(state.rel[k])} · ${state.rel[k]}</div>
+        <div class="npc-line">${line.text}</div>
+      </div>`;
+    }).join("");
+
+    // Week deltas vs week start
+    const start = state.weekStartSnap;
+    if (start) {
+      const chips = buildImpactChips(start);
+      $("week-delta").innerHTML = chips.length
+        ? chips
+            .map((c) => `<span class="impact-chip ${c.up ? "up" : "down"}">${c.text}</span>`)
+            .join("")
+        : `<span class="impact-chip">Status næsten flad</span>`;
+    } else {
+      $("week-delta").innerHTML = "";
+    }
+
     const notes = state.weekNotes.length
-      ? state.weekNotes.map((n) => "• " + n).join("\n")
-      : "• En stille uge i magtens maskinrum.";
-    const mood =
-      "\n\nRelationer: " +
-      REL_KEYS.map((k) => `${REL_META[k].emoji}${relFace(state.rel[k])}`).join(" ");
-    $("week-summary").textContent = notes + mood;
+      ? state.weekNotes
+          .map((n) => `<p class="story-line">• ${n.replace(/</g, "&lt;")}</p>`)
+          .join("")
+      : `<p class="story-line">• En stille uge i magtens maskinrum.</p>`;
+    $("week-summary").innerHTML = notes;
+
+    sfx("click");
 
     if (state.meters.mistanke > 70) {
       const before = snapshot();
