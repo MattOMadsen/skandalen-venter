@@ -9,6 +9,12 @@ Vælg en næsten-rigtig politiker, snyd dig til magt — og undgå at blive opda
 ![Platform](https://img.shields.io/badge/platform-browser-blue)
 ![Sprog](https://img.shields.io/badge/sprog-dansk-red)
 
+## Spil online (GitHub Pages)
+
+**https://mattomadsen.github.io/skandalen-venter/**
+
+(Deployes automatisk fra `main` via GitHub Actions.)
+
 ## Spil med det samme
 
 1. Klon eller download repoet  
