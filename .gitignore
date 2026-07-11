@@ -19,3 +19,6 @@ npm-debug.log*
 # Optional local tooling
 node_modules/
 .cache/
+
+# Local live notes (not part of the game)
+data/live-*.md
