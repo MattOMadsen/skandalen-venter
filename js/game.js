@@ -750,6 +750,10 @@
     }
 
     state.actionsThisWeek += 1;
+    state.usedActionsThisWeek = state.usedActionsThisWeek || [];
+    if (!state.usedActionsThisWeek.includes(action.id)) {
+      state.usedActionsThisWeek.push(action.id);
+    }
     state.weekNotes.push(msg);
     state.history.push({ week: state.week, kind: "action", name: action.name, msg });
     // Cooldown: samme træk dukker ikke op hver uge
@@ -796,10 +800,7 @@
     if (state.actionsThisWeek >= state.maxActions) {
       afterActions();
     } else {
-      $("actions-left").textContent =
-        state.maxActions - state.actionsThisWeek === 1
-          ? "1 træk tilbage"
-          : `${state.maxActions - state.actionsThisWeek} træk tilbage`;
+      renderActionButtons();
     }
   }
 
