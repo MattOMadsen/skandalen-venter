@@ -9,23 +9,15 @@ Vælg en næsten-rigtig politiker, snyd dig til magt — og undgå at blive opda
 ![Platform](https://img.shields.io/badge/platform-browser-blue)
 ![Sprog](https://img.shields.io/badge/sprog-dansk-red)
 
-## Spil online (GitHub Pages)
+## Spil online
 
-- **Projekt-site:** https://mattomadsen.github.io/skandalen-venter/  
-- **User-site (kopi klar):** https://mattomadsen.github.io/
+**https://mattomadsen.github.io/skandalen-venter/**  
 
-### Aktivér Pages (ca. 20 sekunder)
+(Også: https://mattomadsen.github.io/ )
 
-**A) Projekt-repo (anbefalet)**  
-1. https://github.com/MattOMadsen/skandalen-venter/settings/pages  
-2. **Source** → **GitHub Actions** → Save  
-3. Workflow `Deploy to GitHub Pages` kører automatisk.
+Deployes automatisk fra `main` via GitHub Pages.
 
-**B) User-site (allerede klar med spillet)**  
-1. https://github.com/MattOMadsen/MattOMadsen.github.io/settings/pages  
-2. **Source** → Deploy from a branch → `main` / `/ (root)` → Save  
-
-## Spil med det samme
+## Spil lokalt
 
 1. Klon eller download repoet  
 2. Åbn `index.html` i Chrome/Firefox (dobbeltklik eller træk ind i browseren)
