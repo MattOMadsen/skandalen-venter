@@ -512,73 +512,44 @@
 
     if (checkAnyLose()) return;
 
-    // Kort pause så man kan læse replik — så videre
+    // Kun episodens 3 valg — ingen ekstra handlings-menu (mindre støj)
     setTimeout(() => {
       if (checkAnyLose()) return;
-      // Boss: ingen ekstra træk (undtagen midtvej tillader det)
-      if (ep.boss && ep.id !== "boss_midtvalg") {
-        endWeekSummary();
-        return;
-      }
-      showLimitedActions();
-    }, 700);
+      endWeekSummary();
+    }, 650);
   }
 
-  /** Efter episode: max 1 træk, kun 5–6 knapper */
+  /** Beholdt til pressemøde / særlige flows — max 2 knapper */
   function showLimitedActions() {
     state.actionsThisWeek = 0;
     state.maxActions = 1;
     hidePlayPanels();
     $("panel-actions").classList.remove("hidden");
     focusPlayPanel("panel-actions");
-    $("actions-left").textContent = "1 ekstra træk";
-    $("week-hint").textContent =
-      "Historien er spillet. Ét valgfrit træk — eller gå til facit.";
+    $("actions-left").textContent = "Vælg 1";
+    $("week-hint").textContent = "Kun ét valg — hold det simpelt.";
 
-    let pool = [
-      "lav_profil",
-      "tale",
-      "ryd_op",
-      "smør_parti",
-      "bilag",
-      "laek",
-      "middag",
-      "angrib",
-      "husker_ikke",
-    ];
-    if (state.char.uniqueAction) pool.unshift(state.char.uniqueAction);
-    // Fristelse lejlighedsvis
-    if (Math.random() < 0.35) {
-      pool.unshift(pick(TEMPTATION_IDS));
+    // Kun 2 tydelige retninger: ro vs risiko
+    const ids = ["lav_profil", Math.random() < 0.5 ? "tale" : "ryd_op"];
+    if (state.char.uniqueAction && Math.random() < 0.4) {
+      ids[1] = state.char.uniqueAction;
     }
-    // Shuffle and take 5–6
-    pool = [...new Set(pool)];
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    const ids = pool.slice(0, 6);
 
     const list = $("actions-list");
     list.innerHTML = "";
     ids.forEach((id) => {
       const a = ACTIONS[id];
       if (!a) return;
-      if (a.unique && state.char.uniqueAction !== id) return;
       const btn = document.createElement("button");
       btn.type = "button";
       const locked = a.require && !a.require(state);
       btn.disabled = locked;
-      btn.className =
-        "action-btn" +
-        (a.unique ? " unique" : "") +
-        (a.temptation ? " temptation" : "") +
-        (a.fuzzy ? " fuzzy" : "");
+      btn.className = "action-btn" + (a.unique ? " unique" : "");
       const ico = ACTION_ICONS[id] || "•";
       btn.innerHTML = `
         <span class="ico">${ico}</span>
-        <span class="title">${a.temptation ? "⚠️ " : ""}${a.name}${a.unique ? " ★" : ""}</span>
-        <div class="tags">${a.fuzzy ? "???" : a.tags || ""}</div>`;
+        <span class="title">${a.name}${a.unique ? " ★" : ""}</span>
+        <div class="tags">${a.tags || ""}</div>`;
       btn.addEventListener("click", () => doAction(a));
       list.appendChild(btn);
     });
@@ -1026,12 +997,8 @@
     pressSession = null;
     renderAllStatus();
     if (checkAnyLose()) return;
-    // Efter boss-press: facit (ingen ekstra menu)
-    if (state.currentEpisode && state.currentEpisode.boss) {
-      endWeekSummary();
-    } else {
-      showLimitedActions();
-    }
+    // Altid direkte til facit — undgå ekstra valg-menu
+    endWeekSummary();
   }
 
   // —— Week end / lose ——
