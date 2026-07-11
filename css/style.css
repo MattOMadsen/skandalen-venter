@@ -1365,6 +1365,19 @@ h3 {
   text-transform: uppercase;
 }
 
+.impact-strip .impact-body {
+  margin: 0 0 0.55rem;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+#btn-action-continue {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
 .impact-chips {
   display: flex;
   flex-wrap: wrap;

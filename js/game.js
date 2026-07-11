@@ -64,7 +64,8 @@
     el.className = "toast " + kind;
     el.textContent = msg;
     root.appendChild(el);
-    setTimeout(() => el.remove(), 3000);
+    // Lang nok til at læse
+    setTimeout(() => el.remove(), 7000);
   }
 
   function flashScreen(kind) {
@@ -104,7 +105,7 @@
       el.style.left = 12 + Math.random() * 60 + "%";
       el.style.top = 28 + idx * 7 + "%";
       root.appendChild(el);
-      setTimeout(() => el.remove(), 1400);
+      setTimeout(() => el.remove(), 2800);
     }
   }
 
@@ -143,18 +144,27 @@
     return chips;
   }
 
-  function fillImpactStrip(el, before, title) {
+  function fillImpactStrip(el, before, title, bodyText) {
     if (!el) return;
     const chips = buildImpactChips(before);
+    let html = `<div class="impact-title">${title}</div>`;
+    if (bodyText) {
+      html += `<p class="impact-body">${bodyText.replace(/</g, "&lt;")}</p>`;
+    }
     if (!chips.length) {
-      el.innerHTML = `<div class="impact-title">${title}</div><div class="muted">Lille rystelse — status næsten uændret.</div>`;
+      html += `<div class="muted">Lille rystelse — status næsten uændret.</div>`;
     } else {
-      el.innerHTML =
-        `<div class="impact-title">${title}</div><div class="impact-chips">` +
+      html +=
+        `<div class="impact-chips">` +
         chips.map((c) => `<span class="impact-chip ${c.up ? "up" : "down"}">${c.text}</span>`).join("") +
         `</div>`;
     }
+    el.innerHTML = html;
     el.classList.remove("hidden");
+    // Scroll til resultatet så det er synligt
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
   }
 
   function afterChange(before) {
@@ -627,16 +637,18 @@
     state.episodeDone = true;
 
     afterChange(before);
-    fillImpactStrip($("episode-impact"), before, "Effekt af dit valg");
+    const body = [note, reply].filter(Boolean).join(" ");
+    fillImpactStrip($("episode-impact"), before, "Effekt af dit valg", body);
 
-    // Skjul valg, vis fortsæt — så spilleren mærker svaret
+    // Skjul valg, vis fortsæt — intet auto-advance (du skal nå at læse)
     $("episode-choices").classList.add("hidden");
     const cont = $("btn-episode-continue");
     cont.classList.remove("hidden");
     cont.textContent =
       ep.boss && ep.id !== "boss_midtvalg"
-        ? "Se ugens facit →"
-        : "Fortsæt til ugens træk →";
+        ? "Jeg har læst det — se facit →"
+        : "Jeg har læst det — videre til træk →";
+    cont.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
     if (checkAnyLose()) return;
 
@@ -694,6 +706,10 @@
       fb.classList.add("hidden");
       fb.innerHTML = "";
     }
+    const ac = $("btn-action-continue");
+    if (ac) ac.classList.add("hidden");
+    $("actions-list").classList.remove("hidden");
+    $("btn-skip-week").classList.remove("hidden");
 
     // Bland kategorier: 1 safe, 1 image, 1 power, 0–1 spice
     let ids = [
@@ -916,33 +932,63 @@
       state.flags.cleanWeeks = (state.flags.cleanWeeks || 0) + (action.id === "lav_profil" ? 1 : 0);
     }
 
-    // Karakter-replik lejlighedsvis
+    // Karakter-replik lejlighedsvis (i resultat-teksten, ikke hurtig toast)
+    let extraLine = "";
     if (Math.random() < 0.4 && typeof CHAR_QUIPS !== "undefined") {
       const quips = CHAR_QUIPS[state.char.id];
       if (quips) {
-        const q = pick(quips);
-        state.weekNotes.push(q);
-        toast(q.slice(0, 48) + (q.length > 48 ? "…" : ""), "warn");
+        extraLine = pick(quips);
+        state.weekNotes.push(extraLine);
       }
     }
 
     afterChange(before);
-    fillImpactStrip($("last-action-feedback"), before, `Resultat: ${action.name}`);
-    toast(msg.length > 70 ? msg.slice(0, 67) + "…" : msg, scoreDelta(before) >= 0 ? "good" : "bad");
+    // Fuld tekst + tal — bliv stående indtil spilleren trykker
+    const fullMsg = extraLine ? `${msg}\n\n${extraLine}` : msg;
+    fillImpactStrip(
+      $("last-action-feedback"),
+      before,
+      `Resultat: ${action.name}`,
+      fullMsg
+    );
+    toast("Læs resultatet nedenfor — tryk Fortsæt når du er klar", "warn");
+
+    // Skjul handlingsliste mens man læser
+    $("actions-list").classList.add("hidden");
+    $("btn-skip-week").classList.add("hidden");
+
+    const cont = $("btn-action-continue");
+    cont.classList.remove("hidden");
+    const more = state.actionsThisWeek < state.maxActions;
+    cont.textContent = more
+      ? "Jeg har læst det — næste træk →"
+      : "Jeg har læst det — se ugens facit →";
+    cont.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
     if (checkAnyLose()) return;
 
-    if (state.actionsThisWeek >= state.maxActions) {
-      setTimeout(() => afterActions(), 400);
-    } else {
-      renderActionButtons();
-    }
+    cont.onclick = () => {
+      cont.classList.add("hidden");
+      $("actions-list").classList.remove("hidden");
+      $("btn-skip-week").classList.remove("hidden");
+      const fb = $("last-action-feedback");
+      if (fb) fb.classList.add("hidden");
+      if (checkAnyLose()) return;
+      if (state.actionsThisWeek >= state.maxActions) {
+        afterActions();
+      } else {
+        renderActionButtons();
+      }
+    };
   }
 
   $("btn-skip-week").addEventListener("click", () => {
     if (state.actionsThisWeek === 0 && state.episodeDone) {
       state.weekNotes.push("Du springer træk over. Videre til facit.");
     }
+    const cont = $("btn-action-continue");
+    if (cont) cont.classList.add("hidden");
+    $("actions-list").classList.remove("hidden");
     afterActions();
   });
 
