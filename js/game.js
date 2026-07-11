@@ -289,6 +289,7 @@
       history: [],
       comboSneaky: 0,
       refusedTemptationTotal: 0,
+      actionCooldown: {},
     };
     for (let i = 0; i < (char.startEvidence || 0); i++) {
       addEvidence(state, "Gammelt spor fra ‘før din tid’");
@@ -512,44 +513,119 @@
 
     if (checkAnyLose()) return;
 
-    // Kun episodens 3 valg — ingen ekstra handlings-menu (mindre støj)
+    // Efter historie: blandede træk (forskellige hver uge pga. cooldown + shuffle)
     setTimeout(() => {
       if (checkAnyLose()) return;
-      endWeekSummary();
-    }, 650);
+      if (ep.boss && ep.id !== "boss_midtvalg") {
+        endWeekSummary();
+        return;
+      }
+      showRotatingActions();
+    }, 550);
   }
 
-  /** Beholdt til pressemøde / særlige flows — max 2 knapper */
-  function showLimitedActions() {
+  /** Handlinger roterer: max 4 knapper, 2 træk — nyligt brugte er på cooldown */
+  const ACTION_POOLS = {
+    safe: ["lav_profil", "ryd_op", "smør_parti", "husker_ikke"],
+    image: ["tale", "laek", "live_x", "angrib"],
+    power: ["heste", "middag", "job_ven", "bilag"],
+    spice: ["slet_sms", "kuvert", "hemmelig_fond", "bestik_intern", "slet_mapper"],
+  };
+
+  function isOnCooldown(id) {
+    const cd = state.actionCooldown || {};
+    return (cd[id] || 0) > state.week;
+  }
+
+  function setCooldown(id, weeks = 3) {
+    state.actionCooldown = state.actionCooldown || {};
+    state.actionCooldown[id] = state.week + weeks;
+  }
+
+  function pickFromPool(pool, n) {
+    const available = pool.filter((id) => ACTIONS[id] && !isOnCooldown(id));
+    const src = available.length ? available : pool.filter((id) => ACTIONS[id]);
+    const arr = [...src];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr.slice(0, n);
+  }
+
+  function showRotatingActions() {
     state.actionsThisWeek = 0;
-    state.maxActions = 1;
+    state.maxActions = 2;
     hidePlayPanels();
     $("panel-actions").classList.remove("hidden");
     focusPlayPanel("panel-actions");
-    $("actions-left").textContent = "Vælg 1";
-    $("week-hint").textContent = "Kun ét valg — hold det simpelt.";
+    $("actions-left").textContent = "2 træk";
+    $("week-hint").textContent =
+      "Ugens træk skifter — nyligt brugte er på pause. Vælg op til 2.";
 
-    // Kun 2 tydelige retninger: ro vs risiko
-    const ids = ["lav_profil", Math.random() < 0.5 ? "tale" : "ryd_op"];
-    if (state.char.uniqueAction && Math.random() < 0.4) {
-      ids[1] = state.char.uniqueAction;
+    // Bland kategorier: 1 safe, 1 image, 1 power, 0–1 spice
+    let ids = [
+      ...pickFromPool(ACTION_POOLS.safe, 1),
+      ...pickFromPool(ACTION_POOLS.image, 1),
+      ...pickFromPool(ACTION_POOLS.power, 1),
+    ];
+    if (Math.random() < 0.55) {
+      ids.push(...pickFromPool(ACTION_POOLS.spice, 1));
     }
+    // Karakter-unik ~50% af ugerne
+    if (state.char.uniqueAction && Math.random() < 0.55 && !isOnCooldown(state.char.uniqueAction)) {
+      ids.unshift(state.char.uniqueAction);
+    }
+    // Fase-variation: tidligt mere safe/image, sent mere spice
+    if (state.week >= 14 && Math.random() < 0.4) {
+      ids.push(...pickFromPool(ACTION_POOLS.spice, 1));
+    }
+
+    ids = [...new Set(ids)].slice(0, 4);
+
+    // Hvis for få (alle på cooldown), fyld op tilfældigt
+    if (ids.length < 3) {
+      const all = Object.values(ACTION_POOLS).flat();
+      ids = [...new Set([...ids, ...pickFromPool(all, 4)])].slice(0, 4);
+    }
+
+    state.weekActionIds = ids;
+    state.usedActionsThisWeek = [];
+    renderActionButtons();
+  }
+
+  function showLimitedActions() {
+    showRotatingActions();
+  }
+
+  function renderActionButtons() {
+    const ids = state.weekActionIds || [];
+    const used = state.usedActionsThisWeek || [];
+    const left = state.maxActions - state.actionsThisWeek;
+    $("actions-left").textContent =
+      left <= 0 ? "Færdig" : left === 1 ? "1 træk tilbage" : `${left} træk tilbage`;
 
     const list = $("actions-list");
     list.innerHTML = "";
     ids.forEach((id) => {
       const a = ACTIONS[id];
       if (!a) return;
+      if (a.unique && state.char.uniqueAction !== id) return;
+      const already = used.includes(id);
+      const locked = (a.require && !a.require(state)) || already || left <= 0;
       const btn = document.createElement("button");
       btn.type = "button";
-      const locked = a.require && !a.require(state);
       btn.disabled = locked;
-      btn.className = "action-btn" + (a.unique ? " unique" : "");
+      btn.className =
+        "action-btn" +
+        (a.unique ? " unique" : "") +
+        (a.temptation ? " temptation" : "") +
+        (a.fuzzy ? " fuzzy" : "");
       const ico = ACTION_ICONS[id] || "•";
       btn.innerHTML = `
         <span class="ico">${ico}</span>
-        <span class="title">${a.name}${a.unique ? " ★" : ""}</span>
-        <div class="tags">${a.tags || ""}</div>`;
+        <span class="title">${a.temptation ? "⚠️ " : ""}${a.name}${a.unique ? " ★" : ""}${already ? " ✓" : ""}</span>
+        <div class="tags">${a.fuzzy ? "???" : a.tags || ""}</div>`;
       btn.addEventListener("click", () => doAction(a));
       list.appendChild(btn);
     });
@@ -676,6 +752,8 @@
     state.actionsThisWeek += 1;
     state.weekNotes.push(msg);
     state.history.push({ week: state.week, kind: "action", name: action.name, msg });
+    // Cooldown: samme træk dukker ikke op hver uge
+    setCooldown(action.id, action.temptation ? 4 : 2 + Math.floor(Math.random() * 2));
 
     if (action.temptation) {
       toast("⚠️ Fristelse taget", "warn");
@@ -715,13 +793,19 @@
     afterChange(before);
     if (checkAnyLose()) return;
 
-    // Efter ekstra-træk: facit (episode er allerede spillet)
-    afterActions();
+    if (state.actionsThisWeek >= state.maxActions) {
+      afterActions();
+    } else {
+      $("actions-left").textContent =
+        state.maxActions - state.actionsThisWeek === 1
+          ? "1 træk tilbage"
+          : `${state.maxActions - state.actionsThisWeek} træk tilbage`;
+    }
   }
 
   $("btn-skip-week").addEventListener("click", () => {
     if (state.actionsThisWeek === 0 && state.episodeDone) {
-      state.weekNotes.push("Du skipper ekstra-trækket. Videre i historien.");
+      state.weekNotes.push("Du springer træk over. Videre til facit.");
     }
     afterActions();
   });
@@ -997,8 +1081,11 @@
     pressSession = null;
     renderAllStatus();
     if (checkAnyLose()) return;
-    // Altid direkte til facit — undgå ekstra valg-menu
-    endWeekSummary();
+    if (state.currentEpisode && state.currentEpisode.boss) {
+      endWeekSummary();
+    } else {
+      showRotatingActions();
+    }
   }
 
   // —— Week end / lose ——

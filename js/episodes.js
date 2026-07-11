@@ -618,9 +618,9 @@ function pickEpisodeForWeek(state) {
     if (e.boss) return false;
     if (e.minWeek && w < e.minWeek) return false;
     if (e.maxWeek && w > e.maxWeek) return false;
-    // undgå gentagelse for nylig
+    // undgå gentagelse for nylig (strammere)
     if (state.flags.recentEpisodes && state.flags.recentEpisodes.includes(e.id)) {
-      return Math.random() < 0.15;
+      return false;
     }
     return true;
   });
