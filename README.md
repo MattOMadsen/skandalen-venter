@@ -11,24 +11,19 @@ Vælg en næsten-rigtig politiker, snyd dig til magt — og undgå at blive opda
 
 ## Spil online (GitHub Pages)
 
-Når Pages er slået til:
+- **Projekt-site:** https://mattomadsen.github.io/skandalen-venter/  
+- **User-site (kopi klar):** https://mattomadsen.github.io/
 
-- **Projekt-site:** https://mattomadsen.github.io/skandalen-venter/
-- **Alternativt user-site (kopi klar):** https://mattomadsen.github.io/
+### Aktivér Pages (ca. 20 sekunder)
 
-### Aktivér Pages (ét klik)
+**A) Projekt-repo (anbefalet)**  
+1. https://github.com/MattOMadsen/skandalen-venter/settings/pages  
+2. **Source** → **GitHub Actions** → Save  
+3. Workflow `Deploy to GitHub Pages` kører automatisk.
 
-1. Åbn: https://github.com/MattOMadsen/skandalen-venter/settings/pages  
-2. Under **Build and deployment** → **Source**: vælg **GitHub Actions**  
-3. Gem — workflowet `Deploy to GitHub Pages` kører automatisk.
-
-Eller for user-sitet: https://github.com/MattOMadsen/MattOMadsen.github.io/settings/pages → Source: **Deploy from a branch** → `main` / `/` → Save.
-
-## Spil online (GitHub Pages)
-
-**https://mattomadsen.github.io/skandalen-venter/**
-
-(Deployes automatisk fra `main` via GitHub Actions.)
+**B) User-site (allerede klar med spillet)**  
+1. https://github.com/MattOMadsen/MattOMadsen.github.io/settings/pages  
+2. **Source** → Deploy from a branch → `main` / `/ (root)` → Save  
 
 ## Spil med det samme
 
